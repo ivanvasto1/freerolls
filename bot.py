@@ -28,8 +28,8 @@ AFFILIATE_LINKS = {
     "ggpoker": "https://click.ggpartners.com/?serial=10665&creative_id=14177&anid=poffES",
     "bcpoker": "https://bc.poker/a/POFFES",
     "bc poker": "https://bc.poker/a/POFFES",
-    "wpt": "https://PLACEHOLDER_WPT",
-    "wpt global": "https://PLACEHOLDER_WPT",
+    "wpt": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
+    "wpt global": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
 }
 
 PROMO_CODES = {
