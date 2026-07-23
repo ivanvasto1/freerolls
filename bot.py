@@ -16,7 +16,7 @@ CHAT_ID = "@freerolls_es"
 URL = "https://freeroll-password.com/"
 
 SENT_FILE = Path("sent_freerolls.json")
-IMAGES_DIR = Path("images")
+IMAGES_DIR = Path(".")
 
 AFFILIATE_LINKS = {
     "coinpoker": "https://record.coinpokeraffiliates.com/_FpCPzGFIZLTUOsjNOfgKeWNd7ZgqdRLk/5070/",
