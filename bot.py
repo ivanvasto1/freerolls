@@ -31,6 +31,13 @@ AFFILIATE_LINKS = {
     "wpt global": "https://PLACEHOLDER_WPT",
 }
 
+# Ваши промокоды (где есть)
+PROMO_CODES = {
+    "redstar": "POFFES",
+    "bcpoker": "POFFES",
+    "bc poker": "POFFES",
+}
+
 ROOM_IMAGES = {
     "coinpoker": "coinpoker.jpg",
     "pokerking": "pokerking.jpg",
@@ -181,7 +188,6 @@ def convert_to_buenos_aires(date_str: str, time_str: str) -> str:
         return f"{date_str} {time_str}"
 
 def sort_key(fr):
-    """Сортировка: сначала ранние фрироллы"""
     try:
         dt = datetime.strptime(fr.get("date") or "January 1, 2099", "%B %d, %Y")
         tm = re.search(r"(\d{1,2}):(\d{2})", fr.get("time") or "23:59")
@@ -194,6 +200,7 @@ def sort_key(fr):
 def format_message(fr: dict) -> str:
     room_key = get_room_key(fr["room"])
     link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
     start = convert_to_buenos_aires(fr.get("date") or "", fr.get("time") or "")
 
     lines = [
@@ -202,13 +209,23 @@ def format_message(fr: dict) -> str:
         f"📆 Inicio: {start}",
         f"💵 Premio: {fr['prize']}",
     ]
+
+    # Пароль фриролла (если есть на сайте)
     if fr.get("password"):
         lines.append(f"🚪 Contraseña: {fr['password']}")
+
+    # Ваш промокод (если есть)
+    if promo:
+        lines.append(f"🔑 Código: {promo}")
+
     lines.append("")
+
+    # Ссылка (HTML — лучше кликается в Telegram)
     if link and "PLACEHOLDER" not in link:
-        lines.append(f"📎 [Enlace de registro]({link})")
+        lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
     else:
         lines.append("📎 Enlace de registro")
+
     lines.append(f"#{fr['room'].replace(' ', '')}")
     return "\n".join(lines)
 
@@ -228,14 +245,14 @@ def send_to_telegram(fr: dict) -> bool:
             r = requests.post(url, data={
                 "chat_id": CHAT_ID,
                 "caption": text,
-                "parse_mode": "Markdown",
+                "parse_mode": "HTML",
             }, files={"photo": photo}, timeout=30)
     else:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         r = requests.post(url, data={
             "chat_id": CHAT_ID,
             "text": text,
-            "parse_mode": "Markdown",
+            "parse_mode": "HTML",
             "disable_web_page_preview": False,
         }, timeout=30)
 
@@ -253,8 +270,6 @@ def main():
 
     sent = load_sent()
     new_ones = [fr for fr in freerolls if make_unique_id(fr) not in sent]
-
-    # Сначала ранние, потом поздние
     new_ones.sort(key=sort_key)
     print(f"Новых: {len(new_ones)}")
 
@@ -262,7 +277,6 @@ def main():
         print("Нечего отправлять")
         return
 
-    # Один пост за запуск
     fr = new_ones[0]
     if send_to_telegram(fr):
         sent.add(make_unique_id(fr))
