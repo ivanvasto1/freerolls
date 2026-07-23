@@ -210,15 +210,21 @@ def format_message(fr: dict) -> str:
         f"💵 Premio: {fr['prize']}",
     ]
 
-    # Пароль фриролла (если есть на сайте)
-    if fr.get("password"):
-        lines.append(f"🚪 Contraseña: {fr['password']}")
-
-    # Ваш промокод (если есть)
+    # Только наш код, либо "не требуется"
     if promo:
         lines.append(f"🔑 Código: {promo}")
+    else:
+        lines.append("🔑 Código no requerido")
 
     lines.append("")
+
+    if link and "PLACEHOLDER" not in link:
+        lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+    else:
+        lines.append("📎 Enlace de registro")
+
+    lines.append(f"#{fr['room'].replace(' ', '')}")
+    return "\n".join(lines)
 
     # Ссылка (HTML — лучше кликается в Telegram)
     if link and "PLACEHOLDER" not in link:
