@@ -173,6 +173,17 @@ def parse_freerolls(html: str) -> list:
             continue
     return freerolls
 
+def get_ba_datetime(fr):
+    try:
+        dt = datetime.strptime(fr.get("date") or "January 1, 2000", "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", fr.get("time") or "00:00")
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
 def convert_to_buenos_aires(date_str: str, time_str: str) -> str:
     try:
         dt = datetime.strptime(date_str.strip(), "%B %d, %Y")
@@ -187,14 +198,10 @@ def convert_to_buenos_aires(date_str: str, time_str: str) -> str:
         return f"{date_str} {time_str}"
 
 def sort_key(fr):
-    try:
-        dt = datetime.strptime(fr.get("date") or "January 1, 2099", "%B %d, %Y")
-        tm = re.search(r"(\d{1,2}):(\d{2})", fr.get("time") or "23:59")
-        hour = int(tm.group(1)) if tm else 23
-        minute = int(tm.group(2)) if tm else 59
-        return (dt, hour, minute)
-    except Exception:
-        return (datetime(2099, 1, 1), 23, 59)
+    ba_dt = get_ba_datetime(fr)
+    if ba_dt:
+        return ba_dt
+    return datetime(2099, 1, 1, tzinfo=BA_TZ)
 
 def format_message(fr: dict) -> str:
     room_key = get_room_key(fr["room"])
@@ -263,20 +270,18 @@ def main():
     freerolls = parse_freerolls(html)
     print(f"Найдено подходящих: {len(freerolls)}")
 
-    today = datetime.now(BA_TZ).date()
+    now_ba = datetime.now(BA_TZ)
 
-    def is_future_or_today(fr):
-        try:
-            dt = datetime.strptime(fr.get("date") or "January 1, 2000", "%B %d, %Y").date()
-            return dt >= today
-        except Exception:
-            return False
+    actual = []
+    for fr in freerolls:
+        ba_dt = get_ba_datetime(fr)
+        if ba_dt and ba_dt >= now_ba:
+            actual.append(fr)
 
-    freerolls = [fr for fr in freerolls if is_future_or_today(fr)]
-    print(f"Актуальных (сегодня+): {len(freerolls)}")
+    print(f"Актуальных (ещё не начались): {len(actual)}")
 
     sent = load_sent()
-    new_ones = [fr for fr in freerolls if make_unique_id(fr) not in sent]
+    new_ones = [fr for fr in actual if make_unique_id(fr) not in sent]
     new_ones.sort(key=sort_key)
     print(f"Новых: {len(new_ones)}")
 
@@ -285,7 +290,8 @@ def main():
         return
 
     fr = new_ones[0]
-    print(f"Отправляю: [{fr['room']}] {fr['name']} | {fr.get('date')} {fr.get('time')}")
+    ba_dt = get_ba_datetime(fr)
+    print(f"Отправляю: [{fr['room']}] {fr['name']} | BA: {ba_dt}")
     if send_to_telegram(fr):
         sent.add(make_unique_id(fr))
         save_sent(sent)
