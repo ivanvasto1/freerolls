@@ -12,7 +12,8 @@ from pathlib import Path
 # ======================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = "@freerolls_es"
+CHAT_ES = "@freerolls_es"
+CHAT_EN = "@freerolls_en"
 URL = "https://freeroll-password.com/"
 
 SENT_FILE = Path("sent_freerolls.json")
@@ -193,6 +194,19 @@ def convert_to_buenos_aires(date_str: str, time_str: str) -> str:
         hour, minute = int(tm.group(1)), int(tm.group(2))
         dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
         ba = dt.astimezone(BA_TZ)
+        return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+    except Exception:
+        return f"{date_str} {time_str}"
+
+def convert_to_buenos_aires_es(date_str: str, time_str: str) -> str:
+    try:
+        dt = datetime.strptime(date_str.strip(), "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str or "")
+        if not tm:
+            return dt.strftime("%d.%m.%Y")
+        hour, minute = int(tm.group(1)), int(tm.group(2))
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        ba = dt.astimezone(BA_TZ)
         return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
     except Exception:
         return f"{date_str} {time_str}"
@@ -203,11 +217,11 @@ def sort_key(fr):
         return ba_dt
     return datetime(2099, 1, 1, tzinfo=BA_TZ)
 
-def format_message(fr: dict) -> str:
+def format_message_es(fr: dict) -> str:
     room_key = get_room_key(fr["room"])
     link = AFFILIATE_LINKS.get(room_key, "")
     promo = PROMO_CODES.get(room_key)
-    start = convert_to_buenos_aires(fr.get("date") or "", fr.get("time") or "")
+    start = convert_to_buenos_aires_es(fr.get("date") or "", fr.get("time") or "")
 
     lines = [
         f"▶️ Sala: {fr['room']}",
@@ -215,21 +229,65 @@ def format_message(fr: dict) -> str:
         f"📆 Inicio: {start}",
         f"💵 Premio: {fr['prize']}",
     ]
-
     if promo:
         lines.append(f"🔑 Código: {promo}")
     else:
         lines.append("🔑 Código no requerido")
-
     lines.append("")
-
     if link and "PLACEHOLDER" not in link:
         lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
     else:
         lines.append("📎 Enlace de registro")
-
     lines.append(f"#{fr['room'].replace(' ', '')}")
     return "\n".join(lines)
+
+def format_message_en(fr: dict) -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+    start = convert_to_buenos_aires(fr.get("date") or "", fr.get("time") or "")
+
+    lines = [
+        f"▶️ Room: {fr['room']}",
+        f"✅ Name: {fr['name']}",
+        f"📆 Start: {start}",
+        f"💵 Prize: {fr['prize']}",
+    ]
+    if promo:
+        lines.append(f"🔑 Code: {promo}")
+    else:
+        lines.append("🔑 Code not required")
+    lines.append("")
+    if link and "PLACEHOLDER" not in link:
+        lines.append(f'📎 <a href="{link}">Registration link</a>')
+    else:
+        lines.append("📎 Registration link")
+    lines.append(f"#{fr['room'].replace(' ', '')}")
+    return "\n".join(lines)
+
+def send_one(chat_id: str, text: str, image_path) -> bool:
+    if image_path and image_path.exists():
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+        with open(image_path, "rb") as photo:
+            r = requests.post(url, data={
+                "chat_id": chat_id,
+                "caption": text,
+                "parse_mode": "HTML",
+            }, files={"photo": photo}, timeout=30)
+    else:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        r = requests.post(url, data={
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": False,
+        }, timeout=30)
+
+    if r.status_code == 200:
+        print(f"   ✅ {chat_id}")
+        return True
+    print(f"   ❌ {chat_id}: {r.status_code} — {r.text[:200]}")
+    return False
 
 def send_to_telegram(fr: dict) -> bool:
     if not BOT_TOKEN:
@@ -239,30 +297,14 @@ def send_to_telegram(fr: dict) -> bool:
     room_key = get_room_key(fr["room"])
     image_name = ROOM_IMAGES.get(room_key)
     image_path = IMAGES_DIR / image_name if image_name else None
-    text = format_message(fr)
 
-    if image_path and image_path.exists():
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-        with open(image_path, "rb") as photo:
-            r = requests.post(url, data={
-                "chat_id": CHAT_ID,
-                "caption": text,
-                "parse_mode": "HTML",
-            }, files={"photo": photo}, timeout=30)
-    else:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        r = requests.post(url, data={
-            "chat_id": CHAT_ID,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": False,
-        }, timeout=30)
+    text_es = format_message_es(fr)
+    text_en = format_message_en(fr)
 
-    if r.status_code == 200:
-        print(f"✅ Отправлено: [{fr['room']}] {fr['name']}")
-        return True
-    print(f"❌ Ошибка Telegram: {r.status_code} — {r.text[:300]}")
-    return False
+    ok_es = send_one(CHAT_ES, text_es, image_path)
+    ok_en = send_one(CHAT_EN, text_en, image_path)
+
+    return ok_es or ok_en
 
 def main():
     print(f"Запуск: {datetime.now(BA_TZ).strftime('%d.%m.%Y %H:%M')} BA")
