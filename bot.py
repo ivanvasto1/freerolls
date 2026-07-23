@@ -17,6 +17,7 @@ CHAT_EN = "@freerolls_en"
 URL = "https://freeroll-password.com/"
 
 SENT_FILE = Path("sent_freerolls.json")
+JSON_FILE = Path("freerolls.json")   # для сайта
 IMAGES_DIR = Path(".")
 
 AFFILIATE_LINKS = {
@@ -67,54 +68,49 @@ HEADERS = {
 }
 
 BA_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
-SITE_TZ = ZoneInfo("Europe/Moscow")
+SITE_TZ = ZoneInfo("Europe/Moscow")  # сайт ≈ GMT+3
 
-# ======================
-# ФУНКЦИИ
-# ======================
 
-def normalize_room(room: str) -> str:
-    return (room or "").lower().strip()
+def get_ba_datetime(fr):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        dt = datetime.strptime((fr.get("date") or "").strip(), "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", fr.get("time") or "00:00")
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
 
-def is_allowed_room(room: str) -> bool:
-    r = normalize_room(room)
-    for allowed in ALLOWED_ROOMS:
-        if allowed in r or r in allowed:
-            return True
-    return False
 
-def get_room_key(room: str) -> str:
-    r = normalize_room(room)
-    if "coin" in r:
-        return "coinpoker"
-    if "king" in r:
-        return "pokerking"
-    if "redstar" in r or "red star" in r:
-        return "redstar"
-    if "888" in r:
-        return "888poker"
-    if "acr" in r or "americas" in r:
-        return "acr"
-    if "gg" in r:
-        return "ggpoker"
-    if "bc" in r:
-        return "bcpoker"
-    if "wpt" in r:
-        return "wpt"
-    return r
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
 
 def load_sent() -> set:
     if SENT_FILE.exists():
-        with open(SENT_FILE, encoding="utf-8") as f:
-            return set(json.load(f))
+        try:
+            with open(SENT_FILE, encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception:
+            return set()
     return set()
+
 
 def save_sent(sent: set):
     with open(SENT_FILE, "w", encoding="utf-8") as f:
         json.dump(sorted(list(sent)), f, ensure_ascii=False, indent=2)
 
+
 def make_unique_id(fr: dict) -> str:
-    return f"{fr.get('room','')}|{fr.get('name','')}|{fr.get('date','')}|{fr.get('time','')}|{fr.get('password','')}"
+    return f"{fr.get('room','')}|{fr.get('name','')}|{fr.get('date','')}|{fr.get('time','')}"
+
 
 def fetch_html() -> str:
     print("Загружаю страницу...")
@@ -123,18 +119,26 @@ def fetch_html() -> str:
     print(f"Статус: {r.status_code}, размер: {len(r.text)}")
     return r.text
 
+
 def parse_freerolls(html: str) -> list:
     soup = BeautifulSoup(html, "lxml")
     freerolls = []
+
     for pass_el in soup.select(".expass2"):
         try:
-            block = pass_el.find_parent("p", class_="fpexcerpt") or pass_el.find_parent("div")
+            block = pass_el.find_parent("p", class_="fpexcerpt")
+            if not block:
+                block = pass_el.find_parent("div")
+
             text = block.get_text(" ", strip=True) if block else ""
 
             room = None
-            m = re.search(r"Poker Room:\s*([^\n\r]+?)(?:Date:|Time:|Prize|$)", text)
-            if m:
-                room = m.group(1).strip()
+            room_match = re.search(
+                r"Poker Room:\s*([^\n\r]+?)(?:Date:|Time:|Prize|$)", text
+            )
+            if room_match:
+                room = room_match.group(1).strip()
+
             if not is_allowed_room(room):
                 continue
 
@@ -144,22 +148,28 @@ def parse_freerolls(html: str) -> list:
                 date = date_el.get_text(strip=True)
 
             time_str = None
-            m = re.search(r"Time:\s*([^\n\r]+?)(?:Prize|Name|$)", text)
-            if m:
-                time_str = m.group(1).strip()
+            time_match = re.search(
+                r"Time:\s*([^\n\r]+?)(?:Prize|Name|$)", text
+            )
+            if time_match:
+                time_str = time_match.group(1).strip()
 
             prize = None
-            m = re.search(r"Prize Pool:\s*([^\n\r]+?)(?:Name|ID|$)", text)
-            if m:
-                prize = m.group(1).strip()
+            prize_match = re.search(
+                r"Prize Pool:\s*([^\n\r]+?)(?:Name|ID|$)", text
+            )
+            if prize_match:
+                prize = prize_match.group(1).strip()
 
             name = None
-            m = re.search(r"Name:\s*([^\n\r]+?)(?:ID|Password|$)", text)
-            if m:
-                name = m.group(1).strip()
+            name_match = re.search(
+                r"Name:\s*([^\n\r]+?)(?:ID|Password|$)", text
+            )
+            if name_match:
+                name = name_match.group(1).strip()
 
             password = pass_el.get_text(strip=True)
-            if password.lower() in ("not required", "not specified", "-", ""):
+            if not password or password.lower() in ("not required", "not specified", "-"):
                 password = None
 
             freerolls.append({
@@ -172,12 +182,17 @@ def parse_freerolls(html: str) -> list:
             })
         except Exception:
             continue
+
     return freerolls
 
-def get_ba_datetime(fr):
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
     try:
-        dt = datetime.strptime(fr.get("date") or "January 1, 2000", "%B %d, %Y")
-        tm = re.search(r"(\d{1,2}):(\d{2})", fr.get("time") or "00:00")
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
         hour = int(tm.group(1)) if tm else 0
         minute = int(tm.group(2)) if tm else 0
         dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
@@ -185,159 +200,3328 @@ def get_ba_datetime(fr):
     except Exception:
         return None
 
-def convert_to_buenos_aires(date_str: str, time_str: str) -> str:
-    try:
-        dt = datetime.strptime(date_str.strip(), "%B %d, %Y")
-        tm = re.search(r"(\d{1,2}):(\d{2})", time_str or "")
-        if not tm:
-            return dt.strftime("%d.%m.%Y")
-        hour, minute = int(tm.group(1)), int(tm.group(2))
-        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
-        ba = dt.astimezone(BA_TZ)
-        return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
-    except Exception:
-        return f"{date_str} {time_str}"
 
-def convert_to_buenos_aires_es(date_str: str, time_str: str) -> str:
-    try:
-        dt = datetime.strptime(date_str.strip(), "%B %d, %Y")
-        tm = re.search(r"(\d{1,2}):(\d{2})", time_str or "")
-        if not tm:
-            return dt.strftime("%d.%m.%Y")
-        hour, minute = int(tm.group(1)), int(tm.group(2))
-        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
-        ba = dt.astimezone(BA_TZ)
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
         return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
-    except Exception:
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in link:
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in link:
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
         return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
 
-def sort_key(fr):
-    ba_dt = get_ba_datetime(fr)
-    if ba_dt:
-        return ba_dt
-    return datetime(2099, 1, 1, tzinfo=BA_TZ)
 
-def format_message_es(fr: dict) -> str:
+def format_message(fr: dict, lang: str = "en") -> str:
     room_key = get_room_key(fr["room"])
     link = AFFILIATE_LINKS.get(room_key, "")
     promo = PROMO_CODES.get(room_key)
-    start = convert_to_buenos_aires_es(fr.get("date") or "", fr.get("time") or "")
 
-    lines = [
-        f"▶️ Sala: {fr['room']}",
-        f"✅ Nombre: {fr['name']}",
-        f"📆 Inicio: {start}",
-        f"💵 Premio: {fr['prize']}",
-    ]
-    if promo:
-        lines.append(f"🔑 Código: {promo}")
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
     else:
-        lines.append("🔑 Código no requerido")
-    lines.append("")
-    if link and "PLACEHOLDER" not in link:
-        lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
-    else:
-        lines.append("📎 Enlace de registro")
-    lines.append(f"#{fr['room'].replace(' ', '')}")
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
     return "\n".join(lines)
 
-def format_message_en(fr: dict) -> str:
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
     room_key = get_room_key(fr["room"])
     link = AFFILIATE_LINKS.get(room_key, "")
     promo = PROMO_CODES.get(room_key)
-    start = convert_to_buenos_aires(fr.get("date") or "", fr.get("time") or "")
 
-    lines = [
-        f"▶️ Room: {fr['room']}",
-        f"✅ Name: {fr['name']}",
-        f"📆 Start: {start}",
-        f"💵 Prize: {fr['prize']}",
-    ]
-    if promo:
-        lines.append(f"🔑 Code: {promo}")
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
     else:
-        lines.append("🔑 Code not required")
-    lines.append("")
-    if link and "PLACEHOLDER" not in link:
-        lines.append(f'📎 <a href="{link}">Registration link</a>')
-    else:
-        lines.append("📎 Registration link")
-    lines.append(f"#{fr['room'].replace(' ', '')}")
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
     return "\n".join(lines)
 
-def send_one(chat_id: str, text: str, image_path) -> bool:
-    if image_path and image_path.exists():
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-        with open(image_path, "rb") as photo:
-            r = requests.post(url, data={
-                "chat_id": chat_id,
-                "caption": text,
-                "parse_mode": "HTML",
-            }, files={"photo": photo}, timeout=30)
-    else:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        r = requests.post(url, data={
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": False,
-        }, timeout=30)
 
-    if r.status_code == 200:
-        print(f"   ✅ {chat_id}")
-        return True
-    print(f"   ❌ {chat_id}: {r.status_code} — {r.text[:200]}")
-    return False
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
 
-def send_to_telegram(fr: dict) -> bool:
-    if not BOT_TOKEN:
-        print("Ошибка: BOT_TOKEN не найден")
-        return False
 
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
     room_key = get_room_key(fr["room"])
-    image_name = ROOM_IMAGES.get(room_key)
-    image_path = IMAGES_DIR / image_name if image_name else None
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
 
-    text_es = format_message_es(fr)
-    text_en = format_message_en(fr)
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
 
-    ok_es = send_one(CHAT_ES, text_es, image_path)
-    ok_en = send_one(CHAT_EN, text_en, image_path)
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
 
-    return ok_es or ok_en
 
-def main():
-    print(f"Запуск: {datetime.now(BA_TZ).strftime('%d.%m.%Y %H:%M')} BA")
-    html = fetch_html()
-    freerolls = parse_freerolls(html)
-    print(f"Найдено подходящих: {len(freerolls)}")
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
 
-    now_ba = datetime.now(BA_TZ)
 
-    actual = []
-    for fr in freerolls:
-        ba_dt = get_ba_datetime(fr)
-        if ba_dt and ba_dt >= now_ba:
-            actual.append(fr)
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
 
-    print(f"Актуальных (ещё не начались): {len(actual)}")
 
-    sent = load_sent()
-    new_ones = [fr for fr in actual if make_unique_id(fr) not in sent]
-    new_ones.sort(key=sort_key)
-    print(f"Новых: {len(new_ones)}")
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
 
-    if not new_ones:
-        print("Нечего отправлять")
-        return
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
 
-    fr = new_ones[0]
-    ba_dt = get_ba_datetime(fr)
-    print(f"Отправляю: [{fr['room']}] {fr['name']} | BA: {ba_dt}")
-    if send_to_telegram(fr):
-        sent.add(make_unique_id(fr))
-        save_sent(sent)
-        print("Готово")
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
 
-if __name__ == "__main__":
-    main()
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m.%Y at %H:%M (Buenos Aires)")
+
+
+def format_message(fr: dict, lang: str = "en") -> str:
+    room_key = get_room_key(fr["room"])
+    link = AFFILIATE_LINKS.get(room_key, "")
+    promo = PROMO_CODES.get(room_key)
+
+    if lang == "es":
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "es")
+        lines = [
+            f"▶️ Sala: {fr['room']}",
+            f"✅ Nombre: {fr['name']}",
+            f"📆 Inicio: {start}",
+            f"💵 Premio: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Código: {promo}")
+        else:
+            lines.append("🔑 Código no requerido")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
+        else:
+            lines.append("📎 Enlace de registro")
+    else:
+        start = convert_to_buenos_aires_display(fr.get("date") or "", fr.get("time") or "", "en")
+        lines = [
+            f"▶️ Room: {fr['room']}",
+            f"✅ Name: {fr['name']}",
+            f"📆 Start: {start}",
+            f"💵 Prize: {fr['prize']}",
+        ]
+        if promo:
+            lines.append(f"🔑 Code: {promo}")
+        else:
+            lines.append("🔑 Code not required")
+        lines.append("")
+        if link and "PLACEHOLDER" not in (link or ""):
+            lines.append(f'📎 <a href="{link}">Registration link</a>')
+        else:
+            lines.append("📎 Registration link")
+
+    lines.append(f"#{(fr.get('room') or '').replace(' ', '')}")
+    return "\n".join(lines)
+
+
+def get_ba_datetime(fr: dict):
+    """Переводит дату/время фриролла в timezone Buenos Aires."""
+    try:
+        date_str = (fr.get("date") or "").strip()
+        time_str = fr.get("time") or "00:00"
+        dt = datetime.strptime(date_str, "%B %d, %Y")
+        tm = re.search(r"(\d{1,2}):(\d{2})", time_str)
+        hour = int(tm.group(1)) if tm else 0
+        minute = int(tm.group(2)) if tm else 0
+        dt = dt.replace(hour=hour, minute=minute, tzinfo=SITE_TZ)
+        return dt.astimezone(BA_TZ)
+    except Exception:
+        return None
+
+
+def convert_to_buenos_aires_display(date_str: str, time_str: str, lang: str = "en") -> str:
+    ba = get_ba_datetime({"date": date_str, "time": time_str})
+    if not ba:
+        return f"{date_str} {time_str}"
+    if lang == "es":
+        return ba.strftime("%d.%m.%Y a las %H:%M (Buenos Aires)")
+    return ba.strftime("%d.%m
