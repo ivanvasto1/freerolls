@@ -274,6 +274,20 @@ def main():
     freerolls = parse_freerolls(html)
     print(f"Найдено подходящих: {len(freerolls)}")
 
+    # Сегодня по Buenos Aires (без времени)
+    today = datetime.now(BA_TZ).date()
+
+    def is_future_or_today(fr):
+        try:
+            dt = datetime.strptime(fr.get("date") or "January 1, 2000", "%B %d, %Y").date()
+            return dt >= today
+        except Exception:
+            return False
+
+    # Только сегодня и будущее
+    freerolls = [fr for fr in freerolls if is_future_or_today(fr)]
+    print(f"Актуальных (сегодня+): {len(freerolls)}")
+
     sent = load_sent()
     new_ones = [fr for fr in freerolls if make_unique_id(fr) not in sent]
     new_ones.sort(key=sort_key)
@@ -288,6 +302,3 @@ def main():
         sent.add(make_unique_id(fr))
         save_sent(sent)
         print("Готово")
-
-if __name__ == "__main__":
-    main()
