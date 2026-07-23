@@ -31,7 +31,6 @@ AFFILIATE_LINKS = {
     "wpt global": "https://PLACEHOLDER_WPT",
 }
 
-# Ваши промокоды (где есть)
 PROMO_CODES = {
     "redstar": "POFFES",
     "bcpoker": "POFFES",
@@ -210,7 +209,6 @@ def format_message(fr: dict) -> str:
         f"💵 Premio: {fr['prize']}",
     ]
 
-    # Только наш код, либо "не требуется"
     if promo:
         lines.append(f"🔑 Código: {promo}")
     else:
@@ -218,15 +216,6 @@ def format_message(fr: dict) -> str:
 
     lines.append("")
 
-    if link and "PLACEHOLDER" not in link:
-        lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
-    else:
-        lines.append("📎 Enlace de registro")
-
-    lines.append(f"#{fr['room'].replace(' ', '')}")
-    return "\n".join(lines)
-
-    # Ссылка (HTML — лучше кликается в Telegram)
     if link and "PLACEHOLDER" not in link:
         lines.append(f'📎 <a href="{link}">Enlace de registro</a>')
     else:
@@ -274,7 +263,6 @@ def main():
     freerolls = parse_freerolls(html)
     print(f"Найдено подходящих: {len(freerolls)}")
 
-    # Сегодня по Buenos Aires (без времени)
     today = datetime.now(BA_TZ).date()
 
     def is_future_or_today(fr):
@@ -284,7 +272,6 @@ def main():
         except Exception:
             return False
 
-    # Только сегодня и будущее
     freerolls = [fr for fr in freerolls if is_future_or_today(fr)]
     print(f"Актуальных (сегодня+): {len(freerolls)}")
 
@@ -298,7 +285,11 @@ def main():
         return
 
     fr = new_ones[0]
+    print(f"Отправляю: [{fr['room']}] {fr['name']} | {fr.get('date')} {fr.get('time')}")
     if send_to_telegram(fr):
         sent.add(make_unique_id(fr))
         save_sent(sent)
         print("Готово")
+
+if __name__ == "__main__":
+    main()
