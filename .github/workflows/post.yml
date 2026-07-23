@@ -1,0 +1,37 @@
+name: Post Freeroll
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: python bot.py
+
+      - name: Commit sent list
+        run: |
+          git config user.name "freerolls-bot"
+          git config user.email "bot@freerolls.local"
+          git add sent_freerolls.json || true
+          git diff --staged --quiet || git commit -m "update sent freerolls"
+          git push || true
