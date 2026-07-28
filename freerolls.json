@@ -41,6 +41,22 @@
   },
   {
     "room": "888poker",
+    "title": "CasinoOrg $50 Freeroll",
+    "prize": "50$",
+    "startsAt": "2026-07-30T17:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Nettikasinota Poker Mania",
+    "prize": "100$",
+    "startsAt": "2026-07-31T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
     "title": "Worldpokerdeals Exclusive Freeroll",
     "prize": "$150",
     "startsAt": "2026-07-31T14:00:00-03:00",
