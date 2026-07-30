@@ -1,33 +1,9 @@
 [
   {
-    "room": "888poker",
-    "title": "Pokerlistings Freeroll",
-    "prize": "$150",
-    "startsAt": "2026-07-30T15:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "GamblersEmpireAtFacebook",
-    "prize": "$100",
-    "startsAt": "2026-07-30T15:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "BetAndSkill Freeroll Series",
-    "prize": "$100",
-    "startsAt": "2026-07-30T15:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
     "room": "WPT",
-    "title": "PokerWired.com Freeroll",
-    "prize": "$250",
-    "startsAt": "2026-07-30T15:00:00-03:00",
+    "title": "CasinoOrg",
+    "prize": "$100",
+    "startsAt": "2026-07-30T16:00:00-03:00",
     "registerUrl": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
     "promoCode": null
   },
