@@ -1,5 +1,13 @@
 [
   {
+    "room": "WPT",
+    "title": "CasinoOrg",
+    "prize": "$100",
+    "startsAt": "2026-08-05T16:00:00-03:00",
+    "registerUrl": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
+    "promoCode": null
+  },
+  {
     "room": "GGPoker",
     "title": "PokerWired $250",
     "prize": "$250",
@@ -93,14 +101,6 @@
     "prize": "C$350",
     "startsAt": "2026-08-15T04:00:00-03:00",
     "registerUrl": "https://click.ggpartners.com/?serial=10665&creative_id=14177&anid=poffES",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-08-18T17:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
   {
