@@ -1,6 +1,22 @@
 [
   {
     "room": "888poker",
+    "title": "Poker.ru 100$ Special Freeroll",
+    "prize": "$100",
+    "startsAt": "2026-08-07T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Worldpokerdeals Exclusive Freeroll",
+    "prize": "$150",
+    "startsAt": "2026-08-07T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
     "title": "Nettikasinota Poker Mania",
     "prize": "$100",
     "startsAt": "2026-08-07T14:00:00-03:00",
@@ -32,6 +48,14 @@
     "promoCode": null
   },
   {
+    "room": "888poker",
+    "title": "Worldpokerdeals Exclusive Freeroll",
+    "prize": "$150",
+    "startsAt": "2026-08-14T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
     "room": "GGPoker",
     "title": "Exclusive YourPoker Dream Freeroll",
     "prize": "C$350",
@@ -40,11 +64,27 @@
     "promoCode": null
   },
   {
+    "room": "888poker",
+    "title": "Worldpokerdeals Exclusive Freeroll",
+    "prize": "$150",
+    "startsAt": "2026-08-21T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
     "room": "GGPoker",
     "title": "Exclusive YourPoker Dream Freeroll",
     "prize": "C$350",
     "startsAt": "2026-08-22T04:00:00-03:00",
     "registerUrl": "https://click.ggpartners.com/?serial=10665&creative_id=14177&anid=poffES",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Worldpokerdeals Exclusive Freeroll",
+    "prize": "$150",
+    "startsAt": "2026-08-28T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
   {
