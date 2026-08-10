@@ -9,8 +9,24 @@
   },
   {
     "room": "888poker",
-    "title": "Worldpokerdeals Exclusive Freeroll",
-    "prize": "$150",
+    "title": "GamblersEmpireAtFacebook",
+    "prize": "$100",
+    "startsAt": "2026-08-13T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "BetAndSkill Freeroll Series",
+    "prize": "$100",
+    "startsAt": "2026-08-13T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Nettikasinota Poker Mania",
+    "prize": "$100",
     "startsAt": "2026-08-14T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
