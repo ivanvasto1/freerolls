@@ -1,13 +1,5 @@
 [
   {
-    "room": "WPT",
-    "title": "CasinoOrg",
-    "prize": "$100",
-    "startsAt": "2026-08-12T16:00:00-03:00",
-    "registerUrl": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
-    "promoCode": null
-  },
-  {
     "room": "GGPoker",
     "title": "PokerWired $250",
     "prize": "$250",
