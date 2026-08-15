@@ -1,5 +1,13 @@
 [
   {
+    "room": "888poker",
+    "title": "Freebuy PokerDicas 888",
+    "prize": "$50",
+    "startsAt": "2026-08-15T16:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
     "room": "WPT",
     "title": "CasinoOrg",
     "prize": "$100",
