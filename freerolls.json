@@ -16,6 +16,14 @@
     "promoCode": null
   },
   {
+    "room": "888poker",
+    "title": "Bonusvedot Poker Freeroll",
+    "prize": "$100",
+    "startsAt": "2026-08-19T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
     "room": "GGPoker",
     "title": "PokerWired Freeroll",
     "prize": "250$",
