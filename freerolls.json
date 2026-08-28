@@ -1,14 +1,6 @@
 [
   {
     "room": "888poker",
-    "title": "Nettikasinota Poker Mania",
-    "prize": "$100",
-    "startsAt": "2026-08-28T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
     "title": "BONUSVEDOT FREEROLL",
     "prize": "$200",
     "startsAt": "2026-08-29T14:00:00-03:00",
@@ -28,6 +20,22 @@
     "title": "PokerWired.com $300 GTD Freebuy",
     "prize": "$300",
     "startsAt": "2026-08-31T17:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Bonusvedot Poker Freeroll",
+    "prize": "$100",
+    "startsAt": "2026-09-02T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "BetAndSkill Freeroll Series",
+    "prize": "$100",
+    "startsAt": "2026-09-03T15:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
