@@ -1,9 +1,17 @@
 [
   {
     "room": "888poker",
-    "title": "GamblersEmpireAtFacebook",
-    "prize": "100$",
-    "startsAt": "2026-09-10T15:00:00-03:00",
+    "title": "Ian Simpson Home Game Freeroll",
+    "prize": "$10",
+    "startsAt": "2026-09-07T15:30:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Nettikasinota Poker Mania",
+    "prize": "$100",
+    "startsAt": "2026-09-11T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
