@@ -1,9 +1,9 @@
 [
   {
     "room": "888poker",
-    "title": "Ian Simpson Home Game Freeroll",
-    "prize": "$10",
-    "startsAt": "2026-09-07T15:30:00-03:00",
+    "title": "888pokerTV Special Freeroll",
+    "prize": "$500",
+    "startsAt": "2026-09-07T16:30:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
@@ -11,14 +11,6 @@
     "room": "888poker",
     "title": "Nettikasinota Poker Mania",
     "prize": "$100",
-    "startsAt": "2026-09-11T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "Worldpokerdeals Exclusive Freeroll",
-    "prize": "$150",
     "startsAt": "2026-09-11T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
@@ -33,25 +25,9 @@
   },
   {
     "room": "888poker",
-    "title": "Worldpokerdeals Exclusive Freeroll",
-    "prize": "$150",
-    "startsAt": "2026-09-18T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
     "title": "PokerNews Exclusive Freeroll",
     "prize": "$150",
     "startsAt": "2026-09-20T16:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "Worldpokerdeals Exclusive Freeroll",
-    "prize": "$150",
-    "startsAt": "2026-09-25T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
