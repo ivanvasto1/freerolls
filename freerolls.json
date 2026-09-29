@@ -1,5 +1,13 @@
 [
   {
+    "room": "GGPoker",
+    "title": "Bounty Hunters Mini Main $5.40",
+    "prize": "$45000",
+    "startsAt": "2026-09-29T13:30:00-03:00",
+    "registerUrl": "https://click.ggpartners.com/?serial=10665&creative_id=14177&anid=poffES",
+    "promoCode": null
+  },
+  {
     "room": "888poker",
     "title": "888pokerTV Special Freeroll",
     "prize": "$500",
@@ -17,9 +25,33 @@
   },
   {
     "room": "888poker",
+    "title": "BetAndSkill Freeroll Series",
+    "prize": "$100",
+    "startsAt": "2026-10-01T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
     "title": "GamblersEmpireAtFacebook",
     "prize": "100$",
     "startsAt": "2026-10-01T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Nettikasinota Poker Mania",
+    "prize": "$100",
+    "startsAt": "2026-10-02T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "GamblersEmpireAtFacebook",
+    "prize": "100$",
+    "startsAt": "2026-10-05T15:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   }
