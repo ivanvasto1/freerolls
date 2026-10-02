@@ -1,6 +1,14 @@
 [
   {
     "room": "888poker",
+    "title": "Poker.ru 100$ Special Freeroll",
+    "prize": "$100",
+    "startsAt": "2026-10-02T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
     "title": "Nettikasinota Poker Mania",
     "prize": "$100",
     "startsAt": "2026-10-02T14:00:00-03:00",
@@ -105,6 +113,14 @@
   },
   {
     "room": "888poker",
+    "title": "Worldpokerdeals Exclusive Freeroll",
+    "prize": "$150",
+    "startsAt": "2026-10-23T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
     "title": "CasinoOrg",
     "prize": "$50",
     "startsAt": "2026-10-27T17:00:00-03:00",
@@ -116,6 +132,14 @@
     "title": "CasinoOrg",
     "prize": "$50",
     "startsAt": "2026-10-29T17:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Worldpokerdeals Exclusive Freeroll",
+    "prize": "$150",
+    "startsAt": "2026-10-30T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   }
