@@ -1,25 +1,9 @@
 [
   {
-    "room": "WPT",
-    "title": "Worldpokerdeals Exclusive Freeroll",
-    "prize": "$50",
-    "startsAt": "2026-10-04T15:00:00-03:00",
-    "registerUrl": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
-    "promoCode": null
-  },
-  {
     "room": "888poker",
     "title": "RakeTheRake Freeroll",
     "prize": "$125",
     "startsAt": "2026-10-05T16:30:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-06T17:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
@@ -33,33 +17,9 @@
   },
   {
     "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-08T17:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
     "title": "Worldpokerdeals Exclusive Freeroll",
     "prize": "$150",
     "startsAt": "2026-10-09T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-13T17:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-15T17:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
@@ -73,33 +33,9 @@
   },
   {
     "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-20T17:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-22T17:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
     "title": "Worldpokerdeals Exclusive Freeroll",
     "prize": "$150",
     "startsAt": "2026-10-23T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "CasinoOrg",
-    "prize": "$50",
-    "startsAt": "2026-10-27T17:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
