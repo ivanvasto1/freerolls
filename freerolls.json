@@ -1,8 +1,8 @@
 [
   {
     "room": "888poker",
-    "title": "GamblersEmpireAtFacebook",
-    "prize": "100$",
+    "title": "BetAndSkill Freeroll Series",
+    "prize": "$100",
     "startsAt": "2026-10-08T15:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
@@ -17,9 +17,9 @@
   },
   {
     "room": "888poker",
-    "title": "Worldpokerdeals Exclusive Freeroll",
-    "prize": "$150",
-    "startsAt": "2026-10-16T14:00:00-03:00",
+    "title": "GamblersEmpireAtFacebook",
+    "prize": "100$",
+    "startsAt": "2026-10-12T15:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
@@ -27,7 +27,7 @@
     "room": "888poker",
     "title": "Worldpokerdeals Exclusive Freeroll",
     "prize": "$150",
-    "startsAt": "2026-10-23T14:00:00-03:00",
+    "startsAt": "2026-10-16T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
