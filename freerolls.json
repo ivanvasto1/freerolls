@@ -1,21 +1,5 @@
 [
   {
-    "room": "888poker",
-    "title": "Freeroll-passwords",
-    "prize": "$100",
-    "startsAt": "2026-10-07T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "PokerNews Exclusive Freeroll",
-    "prize": "$150",
-    "startsAt": "2026-10-07T16:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
     "room": "WPT",
     "title": "PokerWired",
     "prize": "$150",
