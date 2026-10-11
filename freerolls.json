@@ -1,18 +1,18 @@
 [
   {
     "room": "888poker",
-    "title": "GamblersEmpireAtFacebook",
-    "prize": "100$",
-    "startsAt": "2026-10-15T15:00:00-03:00",
+    "title": "Ian Simpson Home Game Freeroll",
+    "prize": "$10",
+    "startsAt": "2026-10-12T14:30:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
   {
-    "room": "WPT",
-    "title": "CanadianPoker",
-    "prize": "$100",
-    "startsAt": "2026-10-15T21:00:00-03:00",
-    "registerUrl": "https://tracking.wptpartners.com/visit/?bta=3&nci=5373&afp=2047",
+    "room": "888poker",
+    "title": "Ian Simpson Home Game Freeroll",
+    "prize": "$10",
+    "startsAt": "2026-10-12T14:30:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   }
 ]
