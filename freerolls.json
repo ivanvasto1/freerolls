@@ -1,9 +1,9 @@
 [
   {
     "room": "888poker",
-    "title": "Freeroll-passwords",
-    "prize": "$100",
-    "startsAt": "2026-10-14T14:00:00-03:00",
+    "title": "Pokerlistings Freeroll",
+    "prize": "100$",
+    "startsAt": "2026-10-15T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
@@ -28,6 +28,22 @@
     "title": "BetAndSkill Freeroll Series",
     "prize": "$100",
     "startsAt": "2026-10-15T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Freeroll-passwords",
+    "prize": "$100",
+    "startsAt": "2026-10-16T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Freeroll-passwords",
+    "prize": "$200",
+    "startsAt": "2026-10-17T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
