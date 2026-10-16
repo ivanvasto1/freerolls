@@ -1,17 +1,9 @@
 [
   {
     "room": "888poker",
-    "title": "Poker.ru 100$ Special Freeroll",
+    "title": "CardsChat",
     "prize": "$100",
-    "startsAt": "2026-10-16T14:00:00-03:00",
-    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
-    "promoCode": null
-  },
-  {
-    "room": "888poker",
-    "title": "Freeroll-passwords",
-    "prize": "$100",
-    "startsAt": "2026-10-16T14:00:00-03:00",
+    "startsAt": "2026-10-16T16:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
@@ -20,6 +12,14 @@
     "title": "Freeroll-passwords",
     "prize": "$200",
     "startsAt": "2026-10-17T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "888pokerTV Freeroll – LIVE London",
+    "prize": "$330",
+    "startsAt": "2026-10-17T16:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
