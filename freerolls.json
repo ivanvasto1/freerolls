@@ -1,9 +1,41 @@
 [
   {
     "room": "888poker",
+    "title": "Ian Simpson Home Game Freeroll",
+    "prize": "$10",
+    "startsAt": "2026-10-19T14:30:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "PokerWired",
+    "prize": "$250",
+    "startsAt": "2026-10-19T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
     "title": "GamblersEmpireAtFacebook",
     "prize": "100$",
     "startsAt": "2026-10-19T15:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Freeroll-passwords",
+    "prize": "$100",
+    "startsAt": "2026-10-21T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "BetAndSkill Freeroll Series",
+    "prize": "$100",
+    "startsAt": "2026-10-22T15:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
