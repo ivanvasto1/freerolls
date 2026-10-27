@@ -18,6 +18,14 @@
   {
     "room": "888poker",
     "title": "Freeroll-passwords",
+    "prize": "$100",
+    "startsAt": "2026-10-30T14:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "Freeroll-passwords",
     "prize": "$200",
     "startsAt": "2026-10-31T14:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
@@ -28,6 +36,14 @@
     "title": "PokerNews Exclusive Freeroll",
     "prize": "$150",
     "startsAt": "2026-11-01T16:00:00-03:00",
+    "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
+    "promoCode": null
+  },
+  {
+    "room": "888poker",
+    "title": "GamblersEmpireAtFacebook",
+    "prize": "100$",
+    "startsAt": "2026-11-02T15:00:00-03:00",
     "registerUrl": "https://ic.aff-handler.com/c/48676?sr=2025702",
     "promoCode": null
   },
